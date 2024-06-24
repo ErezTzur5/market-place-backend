@@ -1,87 +1,161 @@
-const fs = require("fs");
-const PRODUCTS = require("../data/products.json");
+// controllers/productsController.js
+const Product = require("../models/products.model");
 
-function generateId() {
-  return "_" + Math.random().toString(36).substr(2, 9);
+// Get products count
+async function getProductsCount(req, res) {
+  const name = req.query.name || "";
+  try {
+    const count = await Product.countDocuments({
+      name: { $regex: name, $options: "i" }, // "i" for case-insensitive
+    });
+    res.json({ count });
+  } catch (err) {
+    console.log(
+      "products.controller, getProductsCount. Error while getting products count",
+      err
+    );
+    res.status(500).json({ message: err.message });
+  }
 }
 
-function getProducts(req, res) {
-  res.status(200).json(PRODUCTS);
+// Get all products
+async function getProducts(req, res) {
+  const name = req.query.name || "";
+
+  try {
+    const products = await Product.find({
+      name: { $regex: name, $options: "i" }, // "i" for case-insensitive
+    });
+
+    res.json(products);
+  } catch (err) {
+    console.log(
+      "products.controller, getProducts. Error while getting products",
+      err
+    );
+    res.status(500).json({ message: err.message });
+  }
 }
 
-function getProductById(req, res) {
+// Get single product
+async function getProductById(req, res) {
   const { id } = req.params;
-
-  const product = PRODUCTS.find((product) => {
-    return product._id === id;
-  });
-
-  if (!product) {
-    return res.status(404).json({ message: "Product not found" });
+  try {
+    const product = await Product.findById(id);
+    if (!product) {
+      console.log(
+        `products.controller, getProductById. Product not found with id: ${id}`
+      );
+      return res.status(404).json({ message: "Product not found" });
+    }
+    res.json(product);
+  } catch (err) {
+    if (err.name === "CastError") {
+      console.log(
+        `products.controller, getProductById. Product not found with id: ${id}`
+      );
+      return res.status(404).json({ message: "Product not found" });
+    }
+    console.log(
+      `products.controller, getProductById. Error while getting product with id: ${id}`,
+      err
+    );
+    res.status(500).json({ message: err.message });
   }
-
-  res.status(200).json(product);
 }
 
-function deleteProduct(req, res) {
+// Delete product
+async function deleteProduct(req, res) {
   const { id } = req.params;
+  try {
+    const deletedProduct = await Product.findByIdAndDelete(id);
 
-  const products = [...PRODUCTS];
-  const productIndex = products.findIndex((product) => {
-    return product._id === id;
-  });
+    if (!deletedProduct) {
+      console.log(
+        `products.controller, deleteProduct. Product not found with id: ${id}`
+      );
+      return res.status(404).json({ message: "Product not found" });
+    }
 
-  if (productIndex === -1) {
-    return res.status(404).json({ message: "Product not found" });
+    res.json({ message: "Product deleted" });
+  } catch (err) {
+    console.log(
+      `products.controller, deleteProduct. Error while deleting product with id: ${id}`,
+      err
+    );
+    res.status(500).json({ message: err.message });
   }
-
-  products.splice(productIndex, 1);
-
-  fs.writeFileSync("./data/products.json", JSON.stringify(products, null, 2));
-  res.status(200).json({ message: "Product deleted" });
 }
 
-function createProduct(req, res) {
-  const newProduct = req.body;
+// Create new product
+async function createProduct(req, res) {
+  const productToAdd = req.body;
+  const newProduct = new Product(productToAdd);
 
-  // Validate request body
-  if (!newProduct.name || !newProduct.price || !newProduct.category) {
-    return res.status(400).json({ message: "Missing required fields" });
+  try {
+    const savedProduct = await newProduct.save();
+    res.status(201).json(savedProduct);
+  } catch (err) {
+    console.log(
+      "products.controller, createProduct. Error while creating product",
+      err
+    );
+
+    if (err.name === "ValidationError") {
+      // Mongoose validation error
+      console.log(`products.controller, createProduct. ${err.message}`);
+      res.status(400).json({ message: err.message });
+    } else {
+      // Other types of errors
+      console.log(`products.controller, createProduct. ${err.message}`);
+      res.status(500).json({ message: "Server error while creating product" });
+    }
   }
-
-  // Generate ID for the new product
-  newProduct._id = generateId();
-
-  PRODUCTS.push(newProduct);
-  fs.writeFileSync("./data/products.json", JSON.stringify(PRODUCTS, null, 2));
-
-  res.status(201).json(newProduct);
 }
 
-function updateProduct(req, res) {
+// Update product
+async function updateProduct(req, res) {
   const { id } = req.params;
-  const updatedProduct = req.body;
+  const { name, price, quantity, category } = req.body;
 
-  // Find the index of the product in the array
-  const productIndex = PRODUCTS.findIndex((product) => product._id === id);
+  try {
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      { name, price, quantity, category },
+      { new: true, runValidators: true } // validate before updating
+    );
 
-  if (productIndex === -1) {
-    return res.status(404).json({ message: "Product not found" });
+    if (!updatedProduct) {
+      console.log(
+        `products.controller, updateProduct. Product not found with id: ${id}`
+      );
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    res.json(updatedProduct);
+  } catch (err) {
+    console.log(
+      `products.controller, updateProduct. Error while updating product with id: ${id}`,
+      err
+    );
+
+    if (err.name === "ValidationError") {
+      // Mongoose validation error
+      console.log(`products.controller, updateProduct. ${err.message}`);
+      res.status(400).json({ message: err.message });
+    } else {
+      // Other types of errors
+      console.log(`products.controller, updateProduct. ${err.message}`);
+      res.status(500).json({ message: "Server error while updating product" });
+    }
   }
-
-  // Update the product in the array
-  PRODUCTS[productIndex] = { ...PRODUCTS[productIndex], ...updatedProduct };
-
-  // Write the updated array back to the file
-  fs.writeFileSync("./data/products.json", JSON.stringify(PRODUCTS, null, 2));
-
-  res.status(200).json(PRODUCTS[productIndex]);
 }
 
 module.exports = {
+  getProductsCount,
   getProducts,
   getProductById,
-  deleteProduct,
   createProduct,
   updateProduct,
+  deleteProduct,
 };
