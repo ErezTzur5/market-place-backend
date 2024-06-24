@@ -1,6 +1,6 @@
 // controllers/productsController.js
 const Product = require("../models/products.model");
-
+const { filterProducts } = require("../helpers/products.helper");
 // Get products count
 async function getProductsCount(req, res) {
   const name = req.query.name || "";
@@ -14,6 +14,23 @@ async function getProductsCount(req, res) {
       "products.controller, getProductsCount. Error while getting products count",
       err
     );
+    res.status(500).json({ message: err.message });
+  }
+}
+
+async function getFilteredProducts(req, res) {
+  const { name, category, minPrice, maxPrice } = req.query;
+
+  try {
+    const products = await filterProducts({
+      name,
+      category,
+      minPrice,
+      maxPrice,
+    });
+    res.json(products);
+  } catch (err) {
+    console.error("Error getting filtered products:", err);
     res.status(500).json({ message: err.message });
   }
 }
@@ -158,4 +175,5 @@ module.exports = {
   createProduct,
   updateProduct,
   deleteProduct,
+  getFilteredProducts,
 };
