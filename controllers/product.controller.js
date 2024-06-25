@@ -7,6 +7,7 @@ async function getProductsCount(req, res) {
   try {
     const count = await Product.countDocuments({
       name: { $regex: name, $options: "i" }, // "i" for case-insensitive
+      // res.status(200).json({  });
     });
     res.json({ count });
   } catch (err) {
